@@ -9,7 +9,6 @@ from datetime import datetime
 import io
 from typing import Dict, List, Tuple, Optional
 import platform
-from tkinter import Tk, filedialog
 
 # Configuração da página
 st.set_page_config(
@@ -264,14 +263,6 @@ class ImageProcessor:
             self.log(f"Erro ao criar CSV de resultado: {str(e)}", "ERROR")
             return b""
 
-def select_folder(prompt: str) -> str:
-    """Abre uma janela para selecionar uma pasta usando tkinter."""
-    root = Tk()
-    root.withdraw()  # Esconde a janela principal
-    folder = filedialog.askdirectory(title=prompt)
-    root.destroy()
-    return folder
-
 def main():
     # Título principal
     st.title("🪄 Processador de Imagens com SKU")
@@ -283,11 +274,17 @@ def main():
     
     processor = st.session_state.processor
     
-    # Inicializa variáveis de estado para pastas
-    if 'source_folder' not in st.session_state:
-        st.session_state.source_folder = ""
-    if 'destination_folder' not in st.session_state:
-        st.session_state.destination_folder = ""
+    # Define exemplos de caminhos baseados no sistema operacional
+    system = platform.system()
+    if system == "Windows":
+        source_placeholder = "C:\\Users\\SeuNome\\Imagens"
+        dest_placeholder = "C:\\Users\\SeuNome\\Imagens_Processadas"
+    elif system == "Darwin":  # macOS
+        source_placeholder = "/Users/SeuNome/Pictures"
+        dest_placeholder = "/Users/SeuNome/Desktop/Imagens_Processadas"
+    else:  # Linux ou outros
+        source_placeholder = "/home/seunome/imagens"
+        dest_placeholder = "/home/seunome/imagens_processadas"
     
     # Sidebar
     with st.sidebar:
@@ -345,20 +342,19 @@ def main():
             
             st.markdown("""
             **Como selecionar pastas:**
-            Clique nos botões abaixo para abrir o explorador de arquivos e selecionar as pastas.
+            1. Abra o explorador de arquivos.
+            2. Navegue até a pasta desejada.
+            3. Clique com o botão direito na pasta e selecione 'Copiar caminho' (ou similar).
+            4. Cole o caminho no campo abaixo.
             """)
             
-            # Botão para selecionar pasta de origem
-            if st.button("📂 Selecionar Pasta de Origem", use_container_width=True):
-                source_folder = select_folder("Selecione a pasta principal com as imagens")
-                if source_folder:
-                    st.session_state.source_folder = source_folder
-                    st.success(f"✅ Pasta de origem selecionada: {source_folder}")
+            source_folder = st.text_input(
+                "Pasta de Origem",
+                placeholder=source_placeholder,
+                help=f"Cole o caminho completo da pasta com as imagens. Exemplo: {source_placeholder}"
+            )
             
-            # Exibir pasta de origem selecionada
-            if st.session_state.source_folder:
-                source_folder = st.session_state.source_folder
-                st.write(f"**Pasta de Origem:** {source_folder}")
+            if source_folder:
                 if os.path.exists(source_folder):
                     image_files = processor.get_image_files_from_folder(source_folder)
                     st.success(f"✅ {len(image_files)} imagens encontradas")
@@ -377,26 +373,36 @@ def main():
                                 subfolder_images = [f for f in image_files if f.startswith(subfolder_path)]
                                 st.text(f"📁 {subfolder}: {len(subfolder_images)} imagens")
                 else:
-                    st.error("❌ Pasta de origem não encontrada. Verifique o caminho.")
+                    st.error("❌ Pasta não encontrada. Verifique o caminho.")
             
-            # Botão para selecionar pasta de destino
-            if st.button("📂 Selecionar Pasta de Destino", use_container_width=True):
-                destination_folder = select_folder("Selecione a pasta de destino")
-                if destination_folder:
-                    st.session_state.destination_folder = destination_folder
-                    st.success(f"✅ Pasta de destino selecionada: {destination_folder}")
+            destination_folder = st.text_input(
+                "Pasta de Destino",
+                placeholder=dest_placeholder,
+                help=f"Cole o caminho onde as imagens processadas serão salvas. Exemplo: {dest_placeholder}"
+            )
             
-            # Exibir pasta de destino selecionada
-            if st.session_state.destination_folder:
-                destination_folder = st.session_state.destination_folder
-                st.write(f"**Pasta de Destino:** {destination_folder}")
+            if destination_folder:
                 if os.path.exists(destination_folder):
                     st.success("✅ Pasta de destino válida")
                 else:
                     st.info("ℹ️ Pasta será criada durante o processamento")
             
-            source_ready = st.session_state.source_folder and os.path.exists(st.session_state.source_folder)
-            dest_ready = st.session_state.destination_folder
+            # Botão para verificar pastas
+            if source_folder or destination_folder:
+                if st.button("🔍 Verificar Pastas", use_container_width=True):
+                    if source_folder and not os.path.exists(source_folder):
+                        st.error("❌ Pasta de origem inválida")
+                    elif not source_folder:
+                        st.warning("⚠️ Informe a pasta de origem")
+                    if destination_folder and os.path.exists(destination_folder):
+                        st.success("✅ Pasta de destino válida")
+                    elif not destination_folder:
+                        st.warning("⚠️ Informe a pasta de destino")
+                    if source_folder and os.path.exists(source_folder) and destination_folder:
+                        st.success("✅ Ambas as pastas estão prontas!")
+            
+            source_ready = source_folder and os.path.exists(source_folder)
+            dest_ready = destination_folder
             zip_file = None
             
         else:
@@ -444,12 +450,12 @@ def main():
                     
                     if processing_method == "📁 Pastas Locais":
                         code_to_images, total_files, failures, failed_items = processor.process_folder_images(
-                            st.session_state.source_folder, st.session_state.destination_folder, sku_mapping
+                            source_folder, destination_folder, sku_mapping
                         )
                         
                         result_csv_data = processor.create_result_csv(csv_file, code_to_images)
                         if result_csv_data:
-                            result_csv_path = os.path.join(st.session_state.destination_folder, f"resultado_{datetime.now().strftime('%Y%m%d_%H%M')}.csv")
+                            result_csv_path = os.path.join(destination_folder, f"resultado_{datetime.now().strftime('%Y%m%d_%H%M')}.csv")
                             with open(result_csv_path, 'wb') as f:
                                 f.write(result_csv_data)
                             processor.log(f"CSV resultado salvo em: {result_csv_path}")
@@ -461,7 +467,7 @@ def main():
                             'failures': failures,
                             'failed_items': failed_items,
                             'successful_files': total_files - failures,
-                            'destination_folder': st.session_state.destination_folder,
+                            'destination_folder': destination_folder,
                             'result_csv_path': result_csv_path if result_csv_data else None
                         }
                     else:
