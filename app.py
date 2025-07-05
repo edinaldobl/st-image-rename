@@ -565,7 +565,5 @@ def main():
         st.info("ℹ️ Aguardando processamento...")
 
 if __name__ ==
-
-```
  "__main__":
     main()
